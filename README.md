@@ -4,8 +4,7 @@
 
 **ابزار قدرتمند و امن برای حذف کامل متادیتای حساس از تصاویر**
 
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+
 
 یک ابزار سبک، سریع و کاملاً ایرانی برای پاک‌سازی متادیتا (EXIF، GPS، مدل دوربین، تاریخ، اطلاعات حساس و ...) از عکس‌های شما.
 
