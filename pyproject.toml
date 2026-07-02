@@ -1,0 +1,14 @@
+[project]
+name = "image-metadata-cleaner"
+version = "0.1.0"
+description = "ابزار حذف متادیتای حساس از تصاویر"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "pillow",
+    "piexif",
+    "flask",
+]
+
+[project.scripts]
+img-clean = "cli.main:main"
