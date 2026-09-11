@@ -1,3 +1,18 @@
+# Image Metadata Cleaner
+
+[![Stars](https://img.shields.io/github/stars/Alvandcode/image-metadata-cleaner?style=flat-square)](https://github.com/Alvandcode/image-metadata-cleaner/stargazers) [![License](https://img.shields.io/github/license/Alvandcode/image-metadata-cleaner?style=flat-square)](./LICENSE) [![Last commit](https://img.shields.io/github/last-commit/Alvandcode/image-metadata-cleaner?style=flat-square)](https://github.com/Alvandcode/image-metadata-cleaner/commits)
+
+> Remove EXIF and GPS metadata from images — privacy-first cleaner with batch mode, watermark and Flask API.
+
+<div dir="rtl">
+
+## پاک‌کننده متادیتای عکس
+
+ابزار حفظ حریم خصوصی برای حذف کامل متادیتای EXIF و موقعیت GPS از عکس‌ها؛ با پردازش گروهی، واترمارک و API تحت وب.
+
+</div>
+
+---
 
 ```markdown
 # 🧹 Image Metadata Cleaner
@@ -102,3 +117,19 @@ docker run --rm -v $(pwd):/app metadata-cleaner python -m cli.main photo.jpg -o 
 ---
 
 **تهیه شده با ❤️ برای جامعه ایرانی**
+
+---
+
+## Contributing / مشارکت
+
+- EN: Issues and Pull Requests are welcome. Please see `CONTRIBUTING.md`.
+- FA: برای گزارش مشکل یا پیشنهاد قابلیت جدید، لطفا ایشو یا پول‌ریکوئست ثبت کنید.
+
+## License / لایسنس
+
+MIT — see [LICENSE](./LICENSE).
+
+## Contact / ارتباط
+
+- Telegram: https://t.me/a_c_official
+- Website: https://alvandcode.github.io
