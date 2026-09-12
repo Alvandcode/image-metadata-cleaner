@@ -14,11 +14,9 @@
 
 ---
 
-```markdown
 # 🧹 Image Metadata Cleaner
 
 **ابزار قدرتمند و امن برای حذف کامل متادیتای حساس از تصاویر**
-
 
 یک ابزار سبک، سریع و کاملاً ایرانی برای پاک‌سازی متادیتا (EXIF، GPS، مدل دوربین، تاریخ، اطلاعات حساس و ...) از عکس‌های شما.
 
@@ -26,13 +24,13 @@
 
 ## ✨ ویژگی‌ها
 
-- حذف ۱۰۰٪ متادیتا (EXIF + GPS + اطلاعات پنهان)
-- پشتیبانی کامل از **JPG, PNG, WebP**
+- حذف کامل متادیتا (EXIF + GPS + ICC + XMP + کامنت‌ها) — فایل ورودی هرگز تغییر نمی‌کند
+- پشتیبانی از **JPG, PNG, WebP**
 - **Batch Processing** — پردازش همزمان صدها فایل
-- قابلیت **Resize** و **Watermark**
-- رابط خط فرمان (CLI) بسیار ساده و قدرتمند
-- API وب (Flask) برای استفاده در پروژه‌ها و بات‌ها
-- پشتیبانی از Docker
+- قابلیت **Resize** و **Watermark** (مقیاس‌پذیر با اندازه عکس)
+- رابط خط فرمان (CLI) ساده و قدرتمند
+- API وب (Flask) امن برای استفاده در پروژه‌ها و بات‌ها
+- پشتیبانی از Docker (کاربر غیرروت + Healthcheck)
 - گزارش دقیق از متادیتای حذف‌شده
 
 ---
@@ -44,7 +42,6 @@
 ```bash
 git clone https://github.com/Alvandcode/image-metadata-cleaner.git
 cd image-metadata-cleaner
-
 pip install -r requirements.txt
 ```
 
@@ -52,6 +49,7 @@ pip install -r requirements.txt
 
 ```bash
 pip install -e .
+img-clean --help
 ```
 
 ---
@@ -67,45 +65,76 @@ python -m cli.main input.jpg -o output_clean.jpg
 # پردازش گروهی
 python -m cli.main "photos/*.jpg" -o cleaned/
 
+# فقط نمایش متادیتا (بدون تغییر فایل)
+python -m cli.main photo.jpg --analyze
+
 # با امکانات پیشرفته
 python -m cli.main photo.jpg \
   --resize 1200x800 \
-  --watermark "© AlvandCode"
+  --watermark "© AlvandCode" \
+  --quality 90 --overwrite
 ```
 
 ### ۲. API
 
 ```bash
 python -m api.server
+# یا با متغیر محیطی:
+# HOST=0.0.0.0 PORT=5000 python -m api.server
 ```
 
 ```bash
 # پاک‌سازی از طریق API
 curl -X POST -F "image=@photo.jpg" http://localhost:5000/clean --output cleaned.jpg
+
+# تحلیل متادیتا
+curl -X POST -F "image=@photo.jpg" http://localhost:5000/analyze
+
+# سلامت سرویس
+curl http://localhost:5000/health
 ```
+
+محدودیت‌ها: حداکثر حجم آپلود ۱۶ مگابایت (قابل تنظیم با `MAX_UPLOAD_MB`)، فقط jpg/png/webp.
 
 ### ۳. Docker
 
 ```bash
 docker build -t metadata-cleaner .
-docker run --rm -v $(pwd):/app metadata-cleaner python -m cli.main photo.jpg -o clean.jpg
+# CLI:
+docker run --rm -v "$(pwd):/app" metadata-cleaner python -m cli.main photo.jpg -o clean.jpg
+# API:
+docker run --rm -p 5000:5000 metadata-cleaner python -m api.server
 ```
 
 ---
 
 ## 📋 گزینه‌های CLI
 
-| گزینه           | توضیح                          | مثال                     |
-|------------------|--------------------------------|--------------------------|
-| `--analyze`      | نمایش متادیتا                 | `--analyze`              |
-| `--resize`       | تغییر اندازه                   | `--resize 800x600`       |
-| `--watermark`    | اضافه کردن واترمارک          | `--watermark "© Name"`   |
+| گزینه          | توضیح                          | مثال                   |
+|---------------|--------------------------------|------------------------|
+| `-o, --output`| فایل خروجی یا پوشه (batch)     | `-o cleaned/`          |
+| `--analyze`   | فقط نمایش متادیتا              | `--analyze`            |
+| `--resize`    | تغییر اندازه                   | `--resize 800x600`     |
+| `--watermark` | اضافه کردن واترمارک            | `--watermark "© Name"` |
+| `--quality`   | کیفیت JPEG/WebP (۱ تا ۱۰۰)     | `--quality 90`         |
+| `--overwrite` | بازنویسی خروجی موجود           | `--overwrite`          |
+| `-q, --quiet` | خروجی حداقلی                   | `-q`                   |
+
+---
+
+## 🔒 امنیت
+
+- فایل ورودی هرگز تغییر نمی‌کند؛ خروجی همیشه یک فایل جدید با پیکسل‌های بازسازی‌شده است.
+- API دارای سقف حجم، اعتبارسنجی نوع واقعی تصویر، `secure_filename` و هدرهای امنیتی است.
+- حالت `debug` فلاسک به‌صورت پیش‌فرض خاموش است.
+- گزارش آسیب‌پذیری: به‌جای ایشوی عمومی، از طریق تلگرام یا GitHub Security Advisory اطلاع دهید (جزئیات در `SECURITY.md`).
 
 ---
 
 ## ⭐️ حمایت از پروژه
 
 اگر این ابزار برای شما مفید بود، لطفاً:
+
 - **ستاره (Star)** پروژه را بزنید
 - آن را برای دوستان و همکاران خود به اشتراک بگذارید
 
