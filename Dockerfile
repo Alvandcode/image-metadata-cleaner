@@ -1,4 +1,6 @@
-FROM python:3.11-slim
+# Pinned base for reproducible builds. Refresh digest with:
+#   docker buildx imagetools inspect python:3.11.9-slim-bookworm
+FROM python:3.11.9-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -6,8 +8,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Font for watermark
-RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu \
+# Font for watermark (pinned for bookworm; bump with base image).
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu=2.37-2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -29,4 +31,9 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 
 # Default: show CLI help. Override for API:
 #   docker run --rm -p 5000:5000 metadata-cleaner python -m api.server
+# Hardened API example:
+#   docker run --rm --read-only --tmpfs /tmp -p 5000:5000 \
+#     --memory=512m --cpus=1 --pids-limit=64 \
+#     -e MAX_UPLOAD_MB=16 -e RATE_LIMIT_PER_MIN=30 \
+#     metadata-cleaner python -m api.server
 CMD ["python", "-m", "cli.main", "--help"]

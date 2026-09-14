@@ -1,3 +1,5 @@
-pillow>=10.0.0
-piexif>=1.1.3
-flask>=3.0,<4
+# Pinned for reproducible + supply-chain-safe builds.
+# Update with: pip-compile --generate-hashes -o requirements.lock requirements.in
+pillow==11.1.0
+piexif==1.1.3
+flask==3.1.0

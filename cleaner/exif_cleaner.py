@@ -12,9 +12,14 @@ from typing import Dict, List, Optional, Tuple
 import piexif
 from PIL import ExifTags, Image, ImageDraw, ImageFont
 
-# Pillow security: block decompression-bomb DoS (default ~178MP).
-# Keep default; explicitly refuse absurd resize targets below.
-Image.MAX_IMAGE_PIXELS = Image.MAX_IMAGE_PIXELS  # respect Pillow default
+# Pillow security: block decompression-bomb DoS.
+# Cap at ~50MP (below Pillow default ~178MP) to bound RAM/CPU on untrusted input.
+# Resize targets are additionally validated in _validate_resize.
+try:
+    _default_max = Image.MAX_IMAGE_PIXELS
+    Image.MAX_IMAGE_PIXELS = min(_default_max or 50_000_000, 50_000_000)
+except Exception:
+    Image.MAX_IMAGE_PIXELS = 50_000_000
 Image.LOAD_TRUNCATED_IMAGES = False
 
 SUPPORTED_FORMATS = ("JPEG", "JPG", "PNG", "WEBP")
@@ -261,13 +266,23 @@ def _strip_to_clean_image(img: Image.Image) -> Image.Image:
         clean = img.convert("RGB")
     else:
         # Fallback for exotic modes (I;16, F, etc.): go through RGB/RGBA.
+        # SECURITY: never use img.copy() here — it preserves the info/metadata dict
+        # and would leak EXIF/XMP into the "cleaned" file. Fail closed instead.
         try:
-            clean = img.convert("RGB")
-            fresh = Image.new("RGB", img.size)
-            fresh.paste(clean, (0, 0))
-            clean = fresh
+            converted = img.convert("RGB")
         except Exception:
-            clean = img.copy()
+            converted = None
+            for _mode in ("RGBA", "L"):
+                try:
+                    converted = img.convert(_mode).convert("RGB")
+                    break
+                except Exception:
+                    continue
+            if converted is None:
+                raise ValueError(f"Unsupported image mode {img.mode!r}: cannot strip safely")
+        fresh = Image.new("RGB", img.size)
+        fresh.paste(converted, (0, 0))
+        clean = fresh
     # Defensive: ensure no metadata dict survives.
     try:
         clean.info.clear()
@@ -313,10 +328,34 @@ def clean_metadata(
     else:
         if not isinstance(output_path, str) or not output_path.strip():
             raise ValueError("output_path must be a non-empty string")
-        # Refuse to overwrite the input file itself.
+        # Refuse to overwrite the input file itself (symlink/hardlink aware).
+        # abspath alone is bypassable via symlink -> use realpath + samefile.
         try:
-            if os.path.abspath(output_path) == os.path.abspath(input_path):
+            if os.path.realpath(output_path) == os.path.realpath(input_path):
                 raise ValueError("output_path must differ from input_path (refusing to overwrite original)")
+        except ValueError:
+            raise
+        except Exception:
+            pass
+        try:
+            if os.path.lexists(output_path) and os.path.exists(input_path):
+                if os.path.islink(output_path):
+                    # Output symlink pointing at input (or anywhere sensitive): refuse.
+                    # Caller should unlink/recreate instead of following it.
+                    try:
+                        if os.path.realpath(output_path) == os.path.realpath(input_path):
+                            raise ValueError("output_path symlink resolves to input_path (refusing to follow)")
+                    except ValueError:
+                        raise
+                    except Exception:
+                        pass
+                try:
+                    if os.path.exists(output_path) and os.path.samefile(output_path, input_path):
+                        raise ValueError("output_path is the same file as input_path (refusing to overwrite original)")
+                except ValueError:
+                    raise
+                except OSError:
+                    pass
         except ValueError:
             raise
         except Exception:

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import io
 import os
+import time
+from collections import defaultdict, deque
 
 from flask import Flask, jsonify, request, send_file
 from werkzeug.utils import secure_filename
@@ -20,16 +22,81 @@ import tempfile
 
 from PIL import Image
 
+# Bound decompression-bomb RAM/CPU on untrusted uploads (cleaner also caps this).
+try:
+    Image.MAX_IMAGE_PIXELS = min(Image.MAX_IMAGE_PIXELS or 50_000_000, 50_000_000)
+except Exception:
+    Image.MAX_IMAGE_PIXELS = 50_000_000
+
 app = Flask(__name__)
 
-# 16 MB upload cap (DoS guard). Configurable via env.
-app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_MB", "16")) * 1024 * 1024
+
+def _get_max_upload_bytes() -> int:
+    """Parse MAX_UPLOAD_MB safely; clamp to 1..64 MB (DoS guard)."""
+    raw = os.environ.get("MAX_UPLOAD_MB", "16")
+    try:
+        mb = int(str(raw).strip())
+    except (ValueError, TypeError, AttributeError):
+        mb = 16
+    mb = max(1, min(mb, 64))
+    return mb * 1024 * 1024
+
+
+def _get_max_upload_mb() -> int:
+    return _get_max_upload_bytes() // (1024 * 1024)
+
+
+def _get_port() -> int:
+    raw = os.environ.get("PORT", "5000")
+    try:
+        port = int(str(raw).strip())
+    except (ValueError, TypeError, AttributeError):
+        return 5000
+    if not 1 <= port <= 65535:
+        return 5000
+    return port
+
+
+def _get_rate_limit() -> int:
+    raw = os.environ.get("RATE_LIMIT_PER_MIN", "30")
+    try:
+        v = int(str(raw).strip())
+    except (ValueError, TypeError, AttributeError):
+        return 30
+    return max(1, min(v, 1000))
+
+
+# 16 MB upload cap (DoS guard). Configurable via env, clamped in _get_max_upload_bytes.
+app.config["MAX_CONTENT_LENGTH"] = _get_max_upload_bytes()
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+
+# Simple in-memory sliding-window rate limiter (per-IP) for expensive endpoints.
+# stdlib-only so no extra dependency; for multi-worker prod use Flask-Limiter/redis.
+_RATE_WINDOW_S = 60.0
+_rate_hits: dict[str, deque[float]] = defaultdict(deque)
 
 
 def _allowed(filename: str) -> bool:
     return os.path.splitext(filename or "")[1].lower() in ALLOWED_EXTENSIONS
+
+
+@app.before_request
+def _rate_limit():
+    if request.path in ("/clean", "/analyze"):
+        limit = _get_rate_limit()
+        ip = (request.remote_addr or "unknown")
+        now = time.monotonic()
+        q = _rate_hits[ip]
+        while q and now - q[0] > _RATE_WINDOW_S:
+            q.popleft()
+        if len(q) >= limit:
+            resp = jsonify({"error": f"Rate limit exceeded ({limit}/min). Try again later."})
+            resp.status_code = 429
+            resp.headers["Retry-After"] = "60"
+            return resp
+        q.append(now)
+    return None
 
 
 @app.after_request
@@ -37,12 +104,22 @@ def _security_headers(resp):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+    resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # HSTS is only meaningful over HTTPS; harmless over plain HTTP.
+    resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     return resp
 
 
 @app.errorhandler(413)
 def _too_large(_e):
-    return jsonify({"error": "File too large (max 16MB by default)"}), 413
+    return jsonify({"error": f"File too large (max {_get_max_upload_mb()}MB)"}), 413
+
+
+@app.errorhandler(429)
+def _rate_limited(_e):
+    return jsonify({"error": "Rate limit exceeded. Try again later."}), 429
 
 
 @app.route("/", methods=["GET"])
@@ -126,9 +203,10 @@ def clean():
             result = clean_metadata(src_path, out_path)
         except (ValueError, FileNotFoundError) as e:
             return jsonify({"error": str(e)}), 400
-        except Exception as e:
+        except Exception:
             app.logger.exception("clean failed")
-            return jsonify({"error": f"Processing failed: {type(e).__name__}"}), 500
+            # Do not leak internal exception names to the client.
+            return jsonify({"error": "Processing failed"}), 500
 
         # Stream bytes into memory, then delete temp files BEFORE responding
         # (avoids Windows file-lock race with send_file).
@@ -184,5 +262,5 @@ if __name__ == "__main__":
     # Never enable debug in production (was a critical RCE vector).
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
     host = os.environ.get("HOST", "127.0.0.1")
-    port = int(os.environ.get("PORT", "5000"))
+    port = _get_port()
     app.run(host=host, port=port, debug=debug)
