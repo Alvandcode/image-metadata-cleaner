@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint + typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dev tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: ruff (lint)
+        run: ruff check --output-format=github .
+      - name: ruff (format check)
+        run: ruff format --check .
+      - name: mypy
+        run: mypy
+
+  test:
+    name: test (${{ matrix.os }} / ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run tests
+        run: pytest --cov=cleaner --cov=cli --cov=api --cov-report=term-missing
+      - name: CLI smoke test (real exit codes)
+        shell: bash
+        run: |
+          img-clean --help
+          img-clean --version
+          # `set -e` is on, so assert the failure explicitly instead of
+          # chaining with `;` (which would abort the step).
+          if img-clean missing-file.jpg; then
+            echo "::error::img-clean exited 0 for a missing input"
+            exit 1
+          fi
+          echo "exit codes behave correctly"
+
+  docker:
+    name: docker build + healthcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t metadata-cleaner:ci .
+      - name: API answers on the published port, CLI is installed
+        run: |
+          docker run -d --name imc -p 5000:5000 metadata-cleaner:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5000/health; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:5000/health
+          docker exec imc img-clean --version
+          docker rm -f imc

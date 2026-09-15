@@ -1,22 +1,36 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.env
 .venv/
 venv/
+*.egg-info/
+build/
+dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-dist/
-build/
-*.egg-info/
+.coverage
+htmlcov/
+
+# Local scratch space used while reviewing/verifying (never committed)
+.probe/
+
+# Generated images / cleaning outputs
 *.jpg
 *.jpeg
 *.png
 *.webp
+*.heic
+*.heif
 cleaned_*
 *_cleaned.*
 out/
 cleaned/
-tests/__pycache__/
+
+# ...but the web app may ship raster icons or screenshots
+!docs/**/*.png
+!docs/**/*.jpg
+!docs/**/*.webp
+!docs/**/*.svg

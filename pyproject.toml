@@ -1,36 +1,78 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "image-metadata-cleaner"
-version = "0.2.0"
+version = "0.3.0"
 description = "Remove EXIF/GPS metadata from images — privacy-first cleaner with batch mode, watermark and Flask API"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["exif", "metadata", "privacy", "images", "security-tools"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Security",
     "Topic :: Multimedia :: Graphics",
 ]
+# Pinned to the versions CI runs, so an install is reproducible.
 dependencies = [
-    "pillow>=10.0.0",
-    "piexif>=1.1.3",
-    "flask>=3.0,<4",
+    "pillow==12.3.0",
+    "piexif==1.1.3",
+    "flask==3.1.3",
+    "werkzeug==3.1.5",
 ]
 
 [project.scripts]
-img-clean = "cli.main:main"
+# `cli.main:cli` wraps main() in sys.exit so the exit code is real.
+# Pointing straight at `cli.main:main` made img-clean always exit 0.
+img-clean = "cli.main:cli"
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "ruff>=0.1"]
+heic = ["pillow-heif==1.1.1"]
+dev = [
+    "pytest>=8,<9",
+    "pytest-cov>=5,<7",
+    "ruff==0.14.5",
+    "mypy==1.18.2",
+    "pillow-heif==1.1.1",
+]
+
+[project.urls]
+Homepage = "https://alvandcode.github.io/image-metadata-cleaner/"
+Repository = "https://github.com/Alvandcode/image-metadata-cleaner"
+Changelog = "https://github.com/Alvandcode/image-metadata-cleaner/releases"
 
 [tool.setuptools.packages.find]
 include = ["cleaner*", "cli*", "api*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = ["docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+    "E501",   # long lines are allowed up to line-length via formatter
+    "RUF001", # ambiguous unicode (Persian strings are intentional)
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["cleaner", "cli", "api"]
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = true
+no_implicit_optional = true

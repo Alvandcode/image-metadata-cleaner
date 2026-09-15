@@ -1,8 +1,26 @@
+# Build context hygiene.
+# NOTE: README.md and LICENSE are deliberately NOT ignored — `pip install .`
+# reads the readme and license files declared in pyproject.toml, and excluding
+# them makes the image build fail.
+.git
+.github
+.gitignore
+.dockerignore
+Dockerfile
+.venv
+.probe
+.pytest_cache
+.mypy_cache
+.ruff_cache
 __pycache__
 *.pyc
-.git
-.gitignore
-Dockerfile
-README.md
+*.pyo
+*.egg-info
 tests/
-.venv/
+docs/
+examples/
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md
+*.heic
+*.heif

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/Alvandcode/image-metadata-cleaner/security/advisories/new
+    about: Please use a private GitHub Security Advisory, never a public issue.
+  - name: 💬 Questions and ideas
+    url: https://github.com/Alvandcode/image-metadata-cleaner/discussions
+    about: Ask usage questions or share ideas here.
+  - name: 🌐 Try the web app (no install, works offline)
+    url: https://alvandcode.github.io/image-metadata-cleaner/
+    about: Open the PWA — nothing ever leaves your device.
