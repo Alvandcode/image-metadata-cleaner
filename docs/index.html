@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>پاک‌کننده متادیتای عکس — Image Metadata Cleaner</title>
+<meta name="description" content="Remove EXIF, GPS and camera metadata from your photos. 100% offline, nothing is ever uploaded.">
+<meta name="theme-color" content="#0b0f14" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f7fb" media="(prefers-color-scheme: light)">
+<meta name="color-scheme" content="dark light">
+
+<!-- Hard privacy guarantee: no network access at all from this page.
+     connect-src 'none' means even a malicious script could not upload a photo. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; img-src 'self' blob: data:; script-src 'self'; style-src 'self'; connect-src 'none'; manifest-src 'self'; worker-src 'self'">
+
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <img src="icon.svg" alt="" width="30" height="30">
+      <div>
+        <b data-i18n="app.title">پاک‌کننده متادیتای عکس</b>
+        <span data-i18n="app.subtitle">۱۰۰٪ آفلاین — بدون آپلود</span>
+      </div>
+    </div>
+    <button id="btn-theme" type="button" class="ghost" data-i18n="theme.auto" title="Theme">🌗</button>
+    <button id="btn-lang" type="button" class="ghost" title="Language">EN</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="hero">
+    <h1 data-i18n="hero.title">متادیتای عکس را کامل پاک کن</h1>
+    <p class="lead" data-i18n="hero.lead">
+      عکس‌ها را همین‌جا در مرورگر بازسازی می‌کنیم: EXIF، موقعیت GPS، مدل دوربین،
+      XMP و کامنت‌ها حذف می‌شوند. هیچ بایتی از دستگاه شما خارج نمی‌شود و به هیچ سروری وصل نمی‌شویم.
+    </p>
+    <div class="pills">
+      <span class="pill ok" data-i18n="pill.noupload">🔒 بدون آپلود</span>
+      <span class="pill ok" data-i18n="pill.offline">✈️ کاملاً آفلاین</span>
+      <span class="pill info">JPG · PNG · WebP</span>
+      <span class="pill info">MIT</span>
+    </div>
+  </section>
+
+  <section id="drop" class="drop">
+    <div class="big" data-i18n="drop.title">عکس‌ها را اینجا رها کن</div>
+    <div class="hint" data-i18n="drop.hint">یا انتخاب کن — می‌توانی چند عکس را با هم بیندازی. هیچ فایلی آپلود نمی‌شود.</div>
+    <div class="actions">
+      <button id="btn-pick" type="button" class="primary" data-i18n="drop.choose">انتخاب عکس</button>
+      <button id="btn-demo" type="button" data-i18n="drop.demo">ساخت عکس آزمایشی با GPS</button>
+    </div>
+    <input id="file-input" type="file" accept="image/*,.heic,.heif" multiple>
+  </section>
+
+  <section class="card">
+    <details class="options" id="options">
+      <summary data-i18n="opt.summary">تنظیمات (اختیاری)</summary>
+      <div class="grid">
+        <div class="field">
+          <label for="opt-maxdim" data-i18n="opt.maxdim">حداکثر ابعاد</label>
+          <select id="opt-maxdim">
+            <option value="0" data-i18n="opt.maxdim.keep">دست‌نخورده</option>
+            <option value="3840">3840 px</option>
+            <option value="2048" selected>2048 px</option>
+            <option value="1280">1280 px</option>
+            <option value="800">800 px</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="opt-format" data-i18n="opt.format">قالب خروجی</label>
+          <select id="opt-format">
+            <option value="keep" data-i18n="opt.format.keep">مثل ورودی</option>
+            <option value="image/jpeg">JPEG</option>
+            <option value="image/png">PNG</option>
+            <option value="image/webp">WebP</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="opt-quality"><span data-i18n="opt.quality">کیفیت</span> <span class="value" id="quality-out">92%</span></label>
+          <input id="opt-quality" type="range" min="50" max="100" step="1" value="92">
+        </div>
+        <div class="field">
+          <label for="opt-watermark" data-i18n="opt.watermark">واترمارک (اختیاری)</label>
+          <input id="opt-watermark" type="text" maxlength="120" placeholder="© نام شما">
+        </div>
+        <div class="field">
+          <label for="opt-opacity"><span data-i18n="opt.opacity">شفافیت واترمارک</span> <span class="value" id="opacity-out">35%</span></label>
+          <input id="opt-opacity" type="range" min="5" max="100" step="1" value="35">
+        </div>
+        <div class="field">
+          <label for="opt-position" data-i18n="opt.position">جای واترمارک</label>
+          <select id="opt-position">
+            <option value="bottom-right" data-i18n="pos.bottom-right">پایین راست</option>
+            <option value="bottom-center" data-i18n="pos.bottom-center">پایین وسط</option>
+            <option value="bottom-left" data-i18n="pos.bottom-left">پایین چپ</option>
+            <option value="top-right" data-i18n="pos.top-right">بالا راست</option>
+            <option value="center" data-i18n="pos.center">مرکز</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid">
+        <label class="check"><input id="opt-showmeta" type="checkbox" checked> <span data-i18n="opt.showmeta">نمایش متادیتای پیدا‌شده</span></label>
+        <label class="check"><input id="opt-strip-thumb" type="checkbox" checked> <span data-i18n="opt.stripThumb">حذف بندانگشتی و متادیتای تودرتو</span></label>
+      </div>
+      <p class="muted" data-i18n="opt.note">
+        خروجی همیشه از پیکسل‌های تازه ساخته می‌شود، پس هیچ تگی زنده نمی‌ماند.
+        کانواس مرورگر پروفایل رنگ ICC را حذف می‌کند؛ اگر تطابق دقیق رنگ مهم است از نسخه پایتون با --keep-icc استفاده کن.
+      </p>
+    </details>
+  </section>
+
+  <section id="notice" class="alert" hidden></section>
+
+  <section id="results" hidden>
+    <div class="summary-line">
+      <h2 id="results-title" data-i18n="res.title">نتیجه</h2>
+      <div class="toolbar">
+        <button id="btn-zip" type="button" class="primary" data-i18n="btn.zip">دانلود همه (ZIP)</button>
+        <button id="btn-clear" type="button" class="ghost" data-i18n="btn.clear">پاک کردن فهرست</button>
+      </div>
+    </div>
+    <div id="file-list"></div>
+  </section>
+
+  <h2 data-i18n="proof.title">چرا می‌توانی اعتماد کنی؟</h2>
+  <div class="proof">
+    <div class="card">
+      <h3><span>🛡️</span><span data-i18n="proof.network.title">تست کن که نمی‌توانم عکست را بفرستم</span></h3>
+      <p class="muted" data-i18n="proof.network.body">
+        این صفحه با Content-Security-Policy محافظت می‌شود و مقدار <span class="mono">connect-src</span> آن
+        <span class="mono">'none'</span> است. یعنی مرورگر هر تلاش برای ارسال داده را رد می‌کند.
+      </p>
+      <button id="btn-probe" type="button" data-i18n="proof.network.btn">تلاش برای ارسال داده</button>
+      <div id="probe-result" class="alert" hidden></div>
+    </div>
+    <div class="card">
+      <h3><span>🧪</span><span data-i18n="proof.strip.title">چه چیزی حذف می‌شود؟</span></h3>
+      <ul class="muted">
+        <li data-i18n="proof.strip.1">موقعیت GPS و مختصات دقیق</li>
+        <li data-i18n="proof.strip.2">سریال دوربین، نام مالک، شماره لنز</li>
+        <li data-i18n="proof.strip.3">تاریخ و ساعت اصلی عکس</li>
+        <li data-i18n="proof.strip.4">مدل دستگاه، نسخه نرم‌افزار، تنظیمات عکاسی</li>
+        <li data-i18n="proof.strip.5">XMP، IPTC، کامنت‌ها و بندانگشتی داخلی</li>
+        <li data-i18n="proof.strip.6">پروفایل رنگ ICC (کانواس خروجی sRGB است)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span>⚙️</span><span data-i18n="proof.offline.title">آفلاین و نصب‌شدنی</span></h3>
+      <p class="muted" data-i18n="proof.offline.body">
+        با Service Worker کل برنامه کش می‌شود: می‌توانی اینترنت را کامل قطع کنی و همچنان کار کند.
+        روی موبایل هم می‌توانی آن را به صفحه اصلی اضافه کنی.
+      </p>
+      <div class="toolbar">
+        <button id="btn-install" type="button" data-i18n="proof.install">نصب برنامه</button>
+        <span id="net-state" class="pill"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h3><span>💻</span><span data-i18n="proof.cli.title">برای صدها فایل و HEIC</span></h3>
+      <p class="muted" data-i18n="proof.cli.body">
+        برای پردازش گروهی سنگین، حفظ حرکت WebP، پروفایل رنگ دقیق و پشتیبانی HEIC آیفون از CLI پایتون استفاده کن.
+      </p>
+      <pre class="code">pip install image-metadata-cleaner
+img-clean "photos/*.jpg" -o cleaned/ --jobs 4 --progress</pre>
+    </div>
+  </div>
+
+  <section class="card">
+    <h3 data-i18n="faq.title">پرسش‌های پرتکرار</h3>
+    <details><summary data-i18n="faq.q1">آیا عکس‌هایم جایی ذخیره می‌شوند؟</summary>
+      <p class="muted" data-i18n="faq.a1">نه. پردازش کاملاً داخل مرورگر انجام می‌شود. هیچ درخواست شبکه‌ای وجود ندارد و allow-list شبکه خالی است.</p>
+    </details>
+    <details><summary data-i18n="faq.q2">چرا عکس‌ها کوچک‌تر می‌شوند؟</summary>
+      <p class="muted" data-i18n="faq.a2">هم متادیتا حذف می‌شود و هم تصویر دوباره فشرده می‌شود. مقدار کاهش برای هر فایل نشان داده می‌شود.</p>
+    </details>
+    <details><summary data-i18n="faq.q3">درباره WebP متحرک و HEIC چه؟</summary>
+      <p class="muted" data-i18n="faq.a3">کانواس نمی‌تواند انیمیشن بسازد و مرورگرها HEIC را (به‌جز سافاری) رمزگشایی نمی‌کنند. برای این دو مورد از CLI استفاده کن؛ انیمیشن WebP کامل حفظ می‌شود.</p>
+    </details>
+    <details><summary data-i18n="faq.q4">الگوریتم دقیق چیست؟</summary>
+      <p class="muted" data-i18n="faq.a4">تصویر روی یک canvas تازه کشیده می‌شود (با اصلاح جهت EXIF) و دوباره انکود می‌شود. فایل اصلی هرگز تغییر نمی‌کند.</p>
+    </details>
+  </section>
+
+  <footer>
+    <p>
+      <span data-i18n="footer.made">ساخته‌شده برای جامعه ایرانی</span> ·
+      <a href="https://github.com/Alvandcode/image-metadata-cleaner">GitHub</a> ·
+      <a href="https://github.com/Alvandcode/image-metadata-cleaner/blob/main/SECURITY.md" data-i18n="footer.security">گزارش امنیتی</a> ·
+      <a href="https://t.me/a_c_official">Telegram</a>
+    </p>
+    <ul>
+      <li data-i18n="footer.vendor">JSZip و exifr به‌صورت محلی در پوشه vendor قرار دارند؛ هیچ CDN و تحلیلی‌کننده‌ای استفاده نمی‌شود.</li>
+      <li data-i18n="footer.license">کد تحت لایسنس MIT است.</li>
+    </ul>
+  </footer>
+
+  <noscript>
+    <div class="alert warn">This app needs JavaScript. The Python CLI works without it: <code>img-clean photo.jpg</code></div>
+  </noscript>
+
+</main>
+
+<script src="vendor/jszip.min.js" defer></script>
+<script src="vendor/exifr.min.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>

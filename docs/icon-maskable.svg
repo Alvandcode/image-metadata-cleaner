@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Image Metadata Cleaner">
+  <defs>
+    <linearGradient id="gm" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4cc9a0"/>
+      <stop offset="1" stop-color="#2f8fd0"/>
+    </linearGradient>
+  </defs>
+  <!-- Full-bleed background: Android masks the outer 10% safe zone. -->
+  <rect width="64" height="64" fill="#0b0f14"/>
+  <path d="M32 14 18 20v12c0 9.6 6.6 16.8 14 20.2 7.4-3.4 14-10.6 14-20.2V20L32 14z" fill="url(#gm)"/>
+  <path d="M32 18 22 22.5V32c0 7.2 4.9 12.6 10 15.2 5.1-2.6 10-8 10-15.2v-9.5L32 18z" fill="#0b0f14" opacity="0.5"/>
+  <path d="M24 37l6-7.5 4 4.7 3-3 4 5.8z" fill="#eaf6ff"/>
+  <circle cx="26.5" cy="26" r="2.4" fill="#eaf6ff"/>
+  <path d="M20 44 44 20" stroke="#ff5c6c" stroke-width="3.4" stroke-linecap="round"/>
+</svg>

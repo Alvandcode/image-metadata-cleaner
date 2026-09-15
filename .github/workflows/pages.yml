@@ -1,0 +1,48 @@
+name: Deploy PWA to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the PWA has no network calls
+        run: |
+          # The whole privacy promise is "no upload". Fail the build if the app
+          # grows a fetch/XHR/WebSocket/beacon call to a remote origin.
+          if grep -RInE "(fetch|XMLHttpRequest|WebSocket|sendBeacon)\\s*\\([^)]*https?://" docs/*.js docs/*.html; then
+            echo "::error::The PWA must never talk to a remote origin."
+            exit 1
+          fi
+          test -f docs/index.html
+          test -f docs/sw.js
+          test -f docs/manifest.json
+      - uses: actions/configure-pages@v5
+        with:
+          # Turn Pages on automatically (build type: workflow) so the first
+          # deploy does not need a manual Settings → Pages change.
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4

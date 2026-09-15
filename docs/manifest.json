@@ -1,0 +1,28 @@
+{
+  "name": "Image Metadata Cleaner — پاک‌کننده متادیتای عکس",
+  "short_name": "Metadata Cleaner",
+  "description": "Remove EXIF and GPS metadata from photos. 100% offline — nothing is ever uploaded.",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0f14",
+  "theme_color": "#0b0f14",
+  "categories": ["utilities", "photo", "privacy"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
