@@ -4,15 +4,37 @@ A **100 % client-side** metadata cleaner. No backend, no API, no build step:
 the files in this folder are the whole application.
 
 ```
-index.html        shell + Content-Security-Policy
-styles.css        dark/light themes, RTL + LTR layout
-app.js            decode → fresh canvas → re-encode, metadata report, ZIP export
-sw.js             service worker (offline cache of the shell only)
-manifest.json     PWA manifest
-icon.svg          app icon (+ icon-maskable.svg)
-vendor/           JSZip + exifr, committed on purpose (see vendor/README.md)
-.nojekyll         tell GitHub Pages not to run Jekyll
+index.html              shell + Content-Security-Policy
+styles.css              dark/light themes, RTL + LTR layout
+app.js                  decode → fresh canvas → re-encode, metadata report, ZIP export
+sw.js                   service worker (offline shell + share target); its cache
+                        version is stamped with the commit id by the Pages workflow
+manifest.json           PWA manifest (icons, screenshots, share_target)
+icon.svg                vector icon (+ icon-maskable.svg)
+icon-192/512.png        raster icons: Android and the install prompt
+icon-maskable-512.png   safe-zone icon for Android's cropping
+apple-touch-icon.png    opaque PNG, because iOS ignores SVG here
+screenshot-wide.png     install-prompt screenshots (must match manifest sizes)
+screenshot-narrow.png
+vendor/                 JSZip + exifr, committed on purpose (see vendor/README.md)
+.nojekyll               tell GitHub Pages not to run Jekyll
 ```
+
+Every committed asset is reproducible: `tools/generate_icons.py` redraws the
+PNGs, and the screenshots come from headless Chrome hitting the app's own deep
+links (`?demo=1&theme=dark`). See `CONTRIBUTING.md` for the exact commands.
+
+## Deep links
+
+| URL | Effect |
+|---|---|
+| `?demo=1` | Builds the demo photo (with GPS) and cleans it, without clicking |
+| `?theme=dark` / `?theme=light` / `?theme=auto` | Force a colour scheme |
+| `?lang=en` / `?lang=fa` | Force a language |
+| `?shared=1` | What the share target redirects to: pick up the shared photo |
+
+These exist for docs, screenshots and smoke tests, and they override the stored
+preference in `localStorage`.
 
 ## Privacy contract
 

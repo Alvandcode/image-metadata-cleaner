@@ -83,9 +83,13 @@ const I18N = {
     "status.error": "خطا",
     "notice.count": "{n} عکس انتخاب شد.",
     "notice.big": "فایل {name} بزرگ است ({size}). پردازش ممکن است کند شود.",
+    "notice.downscaled": "{name} حدوداً {mp} مگاپیکسل است؛ برای اطمینان از سالم ماندن خروجی به {edge} پیکسل کوچک شد.",
+    "notice.shared": "{n} عکس از منوی اشتراک سیستم رسید.",
+    "notice.shared.none": "فایلی از منوی اشتراک نرسید (شاید بزرگ‌تر از حد مرورگر بود).",
     "notice.busy": "در حال پردازش {i} از {n}…",
     "notice.done": "{n} عکس پردازش شد. همه در همین دستگاه ماند.",
     "notice.toomany": "حداکثر {max} فایل در هر نوبت پردازش می‌شود.",
+    "error.toolarge": "این تصویر حدوداً {mp} مگاپیکسل است و مرورگر نمی‌تواند رمزگشایی‌اش کند؛ برای این فایل از CLI پایتون استفاده کن.",
     "gps.title": "موقعیت GPS پیدا شد!",
     "gps.body": "این عکس مختصات محل عکاسی را همراه دارد:",
     "gps.map": "دیدن روی نقشه (باز کردن OpenStreetMap)",
@@ -190,9 +194,13 @@ const I18N = {
     "status.error": "Error",
     "notice.count": "{n} photo(s) selected.",
     "notice.big": "{name} is large ({size}). Processing may be slow.",
+    "notice.downscaled": "{name} is about {mp} megapixels, so it was scaled down to {edge} px to keep the output valid.",
+    "notice.shared": "{n} photo(s) arrived from the system share sheet.",
+    "notice.shared.none": "Nothing arrived from the share sheet (the file may have been too large).",
     "notice.busy": "Processing {i} of {n}…",
     "notice.done": "{n} photo(s) processed. Everything stayed on this device.",
     "notice.toomany": "At most {max} files per run.",
+    "error.toolarge": "This image is about {mp} megapixels, which this browser cannot decode; use the Python CLI for it.",
     "gps.title": "GPS location found!",
     "gps.body": "This photo carries the coordinates of where it was taken:",
     "gps.map": "View on a map (opens OpenStreetMap)",
@@ -431,24 +439,127 @@ function pickMime(inputType, wanted) {
 
 const EXT = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 
-function renderCanvas(source, orientation, maxDim, mime, opts) {
+/* --------------------------------------------------------- size guard rails
+ * A browser quietly clamps a canvas that is too large, and a clamped width
+ * makes drawImage() crop instead of scale — a silent, invisible corruption of
+ * the photo. So: probe the real limit once, read the photo's dimensions from
+ * its header before decoding, and shrink on purpose when we must. */
+const CANVAS_PROBE = [32767, 16384, 11180, 8192, 4096];
+let canvasEdgeCache = 0;
+
+function maxCanvasEdge() {
+  if (canvasEdgeCache) return canvasEdgeCache;
+  for (const edge of CANVAS_PROBE) {
+    try {
+      const probe = document.createElement("canvas");
+      probe.width = edge;
+      probe.height = 8;
+      const ctx = probe.getContext("2d");
+      if (!ctx) continue;
+      ctx.fillStyle = "rgb(18, 52, 86)";
+      ctx.fillRect(0, 0, 8, 8);
+      const px = ctx.getImageData(0, 0, 1, 1).data;
+      if (probe.width === edge && px[0] === 18 && px[2] === 86) {
+        canvasEdgeCache = edge;
+        break;
+      }
+    } catch (_) { /* too big for this device, try the next size down */ }
+  }
+  if (!canvasEdgeCache) canvasEdgeCache = 4096;
+  return canvasEdgeCache;
+}
+
+/** The first megabyte — always enough for the header we read. */
+async function readHead(file) {
+  try {
+    return await file.slice(0, 1 << 20).arrayBuffer();
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Dimensions straight out of the container: no decode, no memory blow-up. */
+function peekImageSize(buffer) {
+  if (!buffer || buffer.byteLength < 32) return null;
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) { // JPEG
+    let off = 2;
+    while (off + 9 < bytes.length) {
+      if (bytes[off] !== 0xff) { off++; continue; }
+      const marker = bytes[off + 1];
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { off += 2; continue; }
+      const len = view.getUint16(off + 2, false);
+      const isSof = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+      if (isSof) return { w: view.getUint16(off + 7, false), h: view.getUint16(off + 5, false) };
+      if (len < 2) return null;
+      off += 2 + len;
+    }
+    return null;
+  }
+
+  if (bytes[0] === 0x89 && bytes[1] === 0x50) { // PNG (IHDR is mandatory and first)
+    return { w: view.getUint32(16, false), h: view.getUint32(20, false) };
+  }
+
+  if (bytes[0] === 0x52 && bytes[1] === 0x49) { // RIFF/WEBP
+    const tag = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15]);
+    if (tag === "VP8X") {
+      const w = 1 + (bytes[24] | (bytes[25] << 8) | (bytes[26] << 16));
+      const h = 1 + (bytes[27] | (bytes[28] << 8) | (bytes[29] << 16));
+      return { w, h };
+    }
+    if (tag === "VP8 ") {
+      return { w: view.getUint16(26, true) & 0x3fff, h: view.getUint16(28, true) & 0x3fff };
+    }
+    if (tag === "VP8L") {
+      const bits = view.getUint32(21, true);
+      return { w: 1 + (bits & 0x3fff), h: 1 + ((bits >> 14) & 0x3fff) };
+    }
+  }
+  return null;
+}
+
+function renderCanvas(source, orientation, maxDim, mime, opts, limit) {
   const rawW = source.width;
   const rawH = source.height;
   const swapped = orientation >= 5 && orientation <= 8;
   const orientedW = swapped ? rawH : rawW;
   const orientedH = swapped ? rawW : rawH;
+  const sourceMax = Math.max(orientedW, orientedH);
 
+  const hardMax = limit > 0 ? limit : maxCanvasEdge();
+  const target = maxDim > 0 ? Math.min(maxDim, hardMax) : hardMax;
+  let limited = sourceMax > hardMax;
   let scale = 1;
-  if (maxDim > 0 && Math.max(orientedW, orientedH) > maxDim) {
-    scale = maxDim / Math.max(orientedW, orientedH);
-  }
-  const cw = Math.max(1, Math.round(orientedW * scale));
-  const ch = Math.max(1, Math.round(orientedH * scale));
+  if (sourceMax > target) scale = target / sourceMax;
+  let cw = Math.max(1, Math.round(orientedW * scale));
+  let ch = Math.max(1, Math.round(orientedH * scale));
 
-  const canvas = document.createElement("canvas");
-  canvas.width = cw;
-  canvas.height = ch;
-  const ctx = canvas.getContext("2d");
+  // Browsers clamp an oversized canvas instead of failing loudly, and a
+  // clamped width makes drawImage() crop rather than scale. So ask for the
+  // size, verify we actually got it, and back off until we do.
+  let canvas = null;
+  let ctx = null;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const w = Math.max(1, Math.round(orientedW * scale));
+    const h = Math.max(1, Math.round(orientedH * scale));
+    const candidate = document.createElement("canvas");
+    candidate.width = w;
+    candidate.height = h;
+    const context = candidate.getContext("2d");
+    if (context && candidate.width === w && candidate.height === h) {
+      canvas = candidate;
+      ctx = context;
+      cw = w;
+      ch = h;
+      break;
+    }
+    limited = true;
+    scale *= 0.75;
+  }
+  if (!canvas || !ctx) throw new Error("canvas too large for this browser");
 
   // JPEG has no alpha: flatten onto white instead of black.
   if (mime === "image/jpeg") {
@@ -465,7 +576,7 @@ function renderCanvas(source, orientation, maxDim, mime, opts) {
   ctx.restore();
 
   drawWatermark(ctx, cw, ch, opts);
-  return canvas;
+  return { canvas, limited, sourcePixels: orientedW * orientedH, outW: cw, outH: ch };
 }
 
 function encodeCanvas(canvas, mime, quality) {
@@ -660,19 +771,28 @@ async function processFile(file) {
     item.meta = meta;
     item.gps = gps;
 
+    // Know how big this photo really is before allocating any pixels.
+    const peeks = peekImageSize(await readHead(file));
+    const hardMax = maxCanvasEdge();
+    item.peek = peeks;
+    item.tooLarge = !!peeks && Math.max(peeks.w, peeks.h) > hardMax;
+
     const mime = pickMime(file.type, cfg.wanted);
     const decoded = await decodeImage(file);
     const orientation = decoded.preOriented ? 1 : ((meta && meta.Orientation) || 1);
-    let canvas;
+    let rendered;
     try {
-      canvas = renderCanvas(decoded.source, orientation, cfg.maxDim, mime, {
+      rendered = renderCanvas(decoded.source, orientation, cfg.maxDim, mime, {
         text: cfg.watermark,
         opacity: cfg.opacity,
         position: cfg.position,
-      });
+      }, hardMax);
     } finally {
       decoded.release();
     }
+    const canvas = rendered.canvas;
+    item.limited = rendered.limited;
+    item.sourcePixels = rendered.sourcePixels;
 
     const blob = await encodeCanvas(canvas, mime, cfg.quality);
     item.canvas = canvas;
@@ -685,6 +805,11 @@ async function processFile(file) {
   } catch (err) {
     item.status = "error";
     item.error = err && err.message ? err.message : String(err);
+    // "not an image" would be a lie for a photo the browser is simply too
+    // small to decode, so say what is actually wrong.
+    if (item.tooLarge) {
+      item.errorHint = t("error.toolarge", { mp: ((item.peek.w * item.peek.h) / 1e6).toFixed(1) });
+    }
   }
   renderItem(item);
   return item;
@@ -709,6 +834,8 @@ async function handleFiles(files) {
   $("#btn-zip").disabled = true;
   $("#file-list").hidden = false;
   $("#results").hidden = false;
+  // Screen readers should hear "busy" rather than a half-rendered list.
+  $("#results").setAttribute("aria-busy", "true");
   for (let i = 0; i < accepted.length; i++) {
     if (accepted.length > 1) {
       setNotice(t("notice.busy", { i: i + 1, n: accepted.length }), "ok");
@@ -717,6 +844,7 @@ async function handleFiles(files) {
   }
   state.busy = false;
   $("#btn-zip").disabled = false;
+  $("#results").removeAttribute("aria-busy");
   const ok = state.items.filter((it) => it.status === "done").length;
   setNotice(t("notice.done", { n: ok }), "ok");
   updateSummary();
@@ -734,11 +862,18 @@ function renderItem(item) {
   card.textContent = "";
   card.appendChild(buildItemHeader(item));
   if (item.gps) card.appendChild(buildGpsWarning(item));
+  if (item.limited && item.outDims) {
+    card.appendChild(el("div", "alert warn", t("notice.downscaled", {
+      name: item.name,
+      mp: ((item.sourcePixels || 0) / 1e6).toFixed(1),
+      edge: Math.max(item.outDims.w, item.outDims.h),
+    })));
+  }
 
   if (item.status === "error") {
-    const errLabel = /decode|not a|decode failed|image/i.test(item.error || "")
+    const errLabel = item.errorHint || (/decode|not a|decode failed|image/i.test(item.error || "")
       ? t("error.notimage", { name: item.name })
-      : t("error.generic", { name: item.name, err: item.error });
+      : t("error.generic", { name: item.name, err: item.error }));
     card.appendChild(el("div", "alert danger", errLabel));
     card.appendChild(buildActions(item));
     return;
@@ -893,7 +1028,9 @@ function buildMetadata(item, rows) {
     const tbody = el("tbody");
     for (const [key, value] of personal) {
       const tr = el("tr", "sensitive");
-      tr.appendChild(el("th", null, key));
+      const th = el("th", null, key);
+      th.setAttribute("scope", "row");
+      tr.appendChild(th);
       const td = el("td", null, renderValue(value));
       td.setAttribute("dir", "auto");
       tr.appendChild(td);
@@ -910,7 +1047,9 @@ function buildMetadata(item, rows) {
     const tbody = el("tbody");
     for (const [key, value] of technical) {
       const tr = el("tr", "tech");
-      tr.appendChild(el("th", null, key));
+      const th = el("th", null, key);
+      th.setAttribute("scope", "row");
+      tr.appendChild(th);
       const td = el("td", null, renderValue(value));
       td.setAttribute("dir", "auto");
       tr.appendChild(td);
@@ -1079,6 +1218,15 @@ function init() {
     if (THEMES.indexOf(savedTheme) >= 0) document.documentElement.setAttribute("data-theme", savedTheme);
   } catch (_) { /* storage disabled */ }
 
+  // Deep links, so docs, screenshots and smoke tests need no clicking. They
+  // win over the stored preference, which is why they are applied last:
+  //   ?theme=dark|light&lang=en|fa&demo=1
+  const params = new URLSearchParams(location.search);
+  const urlTheme = params.get("theme");
+  if (THEMES.indexOf(urlTheme) >= 0) document.documentElement.setAttribute("data-theme", urlTheme);
+  const urlLang = params.get("lang");
+  if (urlLang === "fa" || urlLang === "en") lang = urlLang;
+
   applyI18n();
   applyTheme(document.documentElement.getAttribute("data-theme") || "auto");
   initDropzone();
@@ -1145,6 +1293,47 @@ function init() {
 
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register("sw.js").catch(() => { /* offline shell is optional */ });
+  }
+
+  // A photo shared from the operating system's share sheet was parked in a
+  // cache by the service worker (see sw.js); pick it up and clean it.
+  if (params.get("shared") === "1") {
+    takeSharedFiles().then((files) => {
+      if (!files.length) {
+        setNotice(t("notice.shared.none"), "warn");
+        return;
+      }
+      setNotice(t("notice.shared", { n: files.length }), "ok");
+      handleFiles(files);
+    });
+  }
+
+  if (params.get("demo") === "1") {
+    const demo = $("#btn-demo");
+    if (demo) demo.click();
+  }
+}
+
+/** Read, then clear, whatever the share target stashed for us. */
+async function takeSharedFiles() {
+  if (!("caches" in window)) return [];
+  try {
+    const cache = await caches.open("imc-shared");
+    const keys = await cache.keys();
+    if (!keys.length) return [];
+    const files = [];
+    for (const key of keys) {
+      const resp = await cache.match(key);
+      if (!resp) continue;
+      const blob = await resp.blob();
+      let name = resp.headers.get("x-shared-name") || "shared.jpg";
+      try { name = decodeURIComponent(name); } catch (_) { /* keep it verbatim */ }
+      files.push(new File([blob], name, { type: blob.type || "image/jpeg" }));
+    }
+    for (const key of keys) await cache.delete(key);
+    return files;
+  } catch (_) {
+    return [];
   }
 }
 

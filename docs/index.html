@@ -15,7 +15,9 @@
 
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+<!-- iOS refuses an SVG here and ignores transparency, so this must be a PNG. -->
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -117,7 +119,8 @@
     </details>
   </section>
 
-  <section id="notice" class="alert" hidden></section>
+  <!-- Live region: progress and results are announced to screen readers. -->
+  <section id="notice" class="alert" role="status" aria-live="polite" hidden></section>
 
   <section id="results" hidden>
     <div class="summary-line">

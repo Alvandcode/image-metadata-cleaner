@@ -19,10 +19,51 @@
       "purpose": "any"
     },
     {
-      "src": "icon-maskable.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "screenshots": [
+    {
+      "src": "screenshot-wide.png",
+      "sizes": "1280x1600",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Desktop: before/after comparison, the GPS warning and the metadata that was removed"
+    },
+    {
+      "src": "screenshot-narrow.png",
+      "sizes": "412x2200",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Mobile: drop a photo, clean it and download it — all offline"
+    }
+  ],
+  "share_target": {
+    "action": "./share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        {
+          "name": "photos",
+          "accept": ["image/jpeg", "image/png", "image/webp", "image/*"]
+        }
+      ]
+    }
+  }
 }
