@@ -548,6 +548,23 @@ def _validate_resize(resize: tuple[int, int] | None) -> tuple[int, int] | None:
     return (rw, rh)
 
 
+def _fit_within(size: tuple[int, int], box: tuple[int, int]) -> tuple[int, int]:
+    """Scale ``size`` down to fit inside ``box``, keeping the aspect ratio.
+
+    ``resize`` is a bounding box, not an exact output size: squashing a photo to
+    the wrong shape distorts it, and enlarging a small photo adds no detail while
+    making the file bigger. Both used to happen.
+    """
+    width, height = size
+    max_width, max_height = box
+    if width <= 0 or height <= 0:
+        return size
+    scale = min(max_width / width, max_height / height, 1.0)
+    if scale >= 1.0:
+        return (width, height)
+    return (max(1, round(width * scale)), max(1, round(height * scale)))
+
+
 def _validate_quality(quality: int) -> int:
     if isinstance(quality, bool) or not isinstance(quality, int) or not (1 <= quality <= 100):
         raise ValueError("quality must be an integer in 1..100")
@@ -825,7 +842,7 @@ def clean_metadata(
             raise ValueError("Image contains no decodable frames")
 
         if resize:
-            frames = [f.resize(resize, Image.Resampling.LANCZOS) for f in frames]
+            frames = [f.resize(_fit_within(f.size, resize), Image.Resampling.LANCZOS) for f in frames]
 
         watermarked = False
         if watermark_text:

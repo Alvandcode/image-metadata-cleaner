@@ -35,7 +35,8 @@ except ImportError:  # running from a different CWD: add repo root to path
 
 from PIL import Image
 
-API_VERSION = "0.3.0"
+from cleaner import __version__ as API_VERSION
+
 CHUNK_SIZE = 64 * 1024
 
 app = Flask(__name__)

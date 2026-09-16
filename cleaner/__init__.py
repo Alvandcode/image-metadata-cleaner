@@ -17,7 +17,7 @@ from .exif_cleaner import (
     has_rtl,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "MAX_DIMENSION",

@@ -33,7 +33,9 @@ except ImportError:  # running from a different CWD: add repo root to path
         clean_metadata,
     )
 
-__version__ = "0.3.0"
+# Re-exported from the package so the CLI, the wheel metadata and a release tag
+# can never disagree again.
+from cleaner import __version__
 
 _RESIZE_RE = re.compile(r"^\s*(\d+)\s*[xX×*]\s*(\d+)\s*$")
 _CLEANED_RE = re.compile(r"_cleaned$", re.IGNORECASE)
@@ -149,7 +151,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("-o", "--output", default=None, help="Output file (single input) or directory (many)")
     parser.add_argument("--analyze", action="store_true", help="Only show metadata, do not modify anything")
-    parser.add_argument("--resize", default=None, metavar="WxH", help="Resize, e.g. 800x600")
+    parser.add_argument(
+        "--resize",
+        default=None,
+        metavar="WxH",
+        help="Fit inside WxH, keeping the aspect ratio (never enlarges), e.g. 800x600",
+    )
     parser.add_argument("--watermark", default=None, help="Watermark text (RTL/Persian supported)")
     parser.add_argument("--opacity", type=float, default=0.35, help="Watermark opacity 0-1 (default 0.35)")
     parser.add_argument(

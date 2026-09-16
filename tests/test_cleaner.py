@@ -355,9 +355,17 @@ def test_resize_validation(tmp_path):
         clean_metadata(str(src), str(tmp_path / "o.jpg"), resize=(0, 0))
     with pytest.raises((ValueError, Exception)):
         clean_metadata(str(src), str(tmp_path / "o.jpg"), resize=(-1, 10))
+    # resize is a bounding box: the aspect ratio survives (50x50 into 25x20 is
+    # 20x20, not a squashed 25x20) and a small photo is never enlarged.
     clean_metadata(str(src), str(tmp_path / "o2.jpg"), resize=(25, 20))
     with Image.open(tmp_path / "o2.jpg") as im:
-        assert im.size == (25, 20)
+        assert im.size == (20, 20)
+    clean_metadata(str(src), str(tmp_path / "o3.jpg"), resize=(500, 500))
+    with Image.open(tmp_path / "o3.jpg") as im:
+        assert im.size == (50, 50)
+    clean_metadata(str(src), str(tmp_path / "o4.jpg"), resize=(20, 40))
+    with Image.open(tmp_path / "o4.jpg") as im:
+        assert im.size == (20, 20)
 
 
 # --------------------------------------------------------------------------
@@ -652,7 +660,9 @@ def test_api_clean_options(jpg_with_exif):
     r = client.post("/clean", data=data, content_type="multipart/form-data")
     assert r.status_code == 200, r.data
     with Image.open(io.BytesIO(r.data)) as im:
-        assert im.size == (200, 100)
+        # 200x100 is a bounding box: it fits inside, and the aspect ratio of the
+        # source survives instead of being squashed to exactly 200x100.
+        assert im.size[1] == 100 and im.size[0] <= 200, im.size
         assert im.format == "PNG"
 
     bad = {"image": (io.BytesIO(payload), "photo.jpg"), "resize": "nonsense"}
@@ -708,6 +718,35 @@ def test_api_large_upload_is_chunked(tmp_path):
 # --------------------------------------------------------------------------
 # Packaging sanity
 # --------------------------------------------------------------------------
+def test_version_is_single_sourced():
+    """The CLI used to print 0.3.0 while the wheel said 0.4.0. One source now."""
+    from importlib.metadata import version as installed_version
+
+    from api.server import API_VERSION
+    from cleaner import __version__
+    from cli.main import __version__ as cli_version
+
+    assert cli_version == __version__
+    assert __version__ == API_VERSION
+    assert installed_version("image-metadata-cleaner") == __version__
+
+
+def test_resize_is_a_bounding_box_not_an_exact_size(tmp_path):
+    """resize=(w, h) must fit inside the box: no stretching, no enlarging."""
+    src = tmp_path / "wide.png"
+    Image.new("RGB", (400, 100), color="white").save(str(src))
+
+    out = tmp_path / "wide_clean.png"
+    clean_metadata(str(src), str(out), resize=(100, 100))
+    with Image.open(out) as im:
+        assert im.size == (100, 25)
+
+    bigger = tmp_path / "bigger.png"
+    clean_metadata(str(src), str(bigger), resize=(4000, 4000))
+    with Image.open(bigger) as im:
+        assert im.size == (400, 100), "a photo smaller than the box must not be enlarged"
+
+
 def test_supported_extensions_are_consistent():
     assert ".jpg" in SUPPORTED_EXTENSIONS and ".webp" in SUPPORTED_EXTENSIONS
 
