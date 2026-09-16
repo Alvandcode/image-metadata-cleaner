@@ -57,7 +57,11 @@ pip install -e ".[dev]"        # or: pip install -r requirements.txt
 img-clean --version
 ```
 
-Or from PyPI (once published): `pip install image-metadata-cleaner`.
+PyPI publishing is wired up (trusted publishing, no stored token) and runs on
+every `v*` tag, but **the package is not published yet**: until the first
+release runs, install from the repository as shown below. Everything the naming
+needs on PyPI's side is a one-time setup, documented in
+[`CONTRIBUTING.md`](./CONTRIBUTING.md#first-pypi-release-one-time-setup).
 
 ### 3. Docker (optional API)
 
@@ -100,7 +104,7 @@ img-clean photo.jpg \
 |---|---|---|
 | `-o, --output` | Output file (single input) or directory (many) | `-o cleaned/` |
 | `--analyze` | Show metadata only; modifies nothing | `--analyze` |
-| `--resize` | Resize to fit exactly | `--resize 800x600` |
+| `--resize` | Fit inside `WxH`: aspect ratio kept, never enlarges | `--resize 800x600` |
 | `--watermark` | Watermark text (RTL/Persian aware) | `--watermark "© Name"` |
 | `--opacity` | Watermark opacity, 0–1 | `--opacity 0.35` |
 | `--watermark-position` | `bottom-right` (default), `bottom-left`, `bottom-center`, `top-right`, `top-left`, `top-center`, `center` | `--watermark-position center` |
@@ -246,7 +250,30 @@ behind a reverse proxy with TLS, auth and rate limiting.
   validation, `secure_filename`, security headers, debug off by default,
   timeouts and no `eval`.
 - **DoS guards.** Pillow's decompression-bomb protection, an explicit
-  `MAX_PIXELS` output cap and `MAX_DIMENSION` for `--resize`.
+  `MAX_PIXELS` output cap, `MAX_DIMENSION` for `--resize`, and a canvas-size
+  guard in the web app that verifies the browser really gave it the pixels it
+  asked for (a silently clamped canvas would crop the photo).
+
+### Verify instead of trusting
+
+Nothing here asks for trust; every claim is checkable:
+
+```bash
+# the deployed web app really is this source
+curl -s https://alvandcode.github.io/image-metadata-cleaner/app.js | diff - docs/app.js
+
+# a downloaded release really was built by this repository
+sha256sum -c SHA256SUMS.txt
+gh attestation verify img-clean-linux --repo Alvandcode/image-metadata-cleaner
+
+# the dependencies really have no known advisories
+pip-audit --requirement requirements.txt
+zizmor .github/workflows
+```
+
+Failures here are security bugs: the model they defend, the adversaries they
+assume and the risks that remain are written down in
+[`THREAT_MODEL.md`](./THREAT_MODEL.md).
 
 Report vulnerabilities through a **private GitHub Security Advisory**
 (<https://github.com/Alvandcode/image-metadata-cleaner/security/advisories/new>) —
@@ -277,12 +304,15 @@ api/                  optional Flask API for Docker
 ```bash
 python -m venv .venv && . .venv/bin/activate    # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-pytest          # 52 tests
+pytest          # 66 tests, including property-based ones
 ruff check . && ruff format --check . && mypy
+.venv/Scripts/python.exe tools/dev_server.py --port 8777   # work on the web app
 ```
 
 CI runs lint + typecheck + tests on Linux and Windows (Python 3.10 and 3.12),
-plus a Docker build/healthcheck job. See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+a workflow/dependency audit (`zizmor`, `pip-audit`), dependency review on pull
+requests, and a Docker build/healthcheck job. See
+[`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ## 📄 License
 

@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "image-metadata-cleaner"
-version = "0.3.0"
+# Single source of truth: cleaner/__init__.py. A tag or an install can no longer
+# disagree with the version the CLI reports.
+dynamic = ["version"]
 description = "Remove EXIF/GPS metadata from images — privacy-first cleaner with batch mode, watermark and Flask API"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -35,9 +37,12 @@ heic = ["pillow-heif==1.7.0"]
 dev = [
     "pytest>=9,<10",
     "pytest-cov>=7,<8",
+    "hypothesis==6.168.0",
     "ruff==0.16.7",
     "mypy==2.3.1",
     "pillow-heif==1.7.0",
+    "zizmor==1.30.1",
+    "pip-audit==2.10.1",
 ]
 
 [project.urls]
@@ -48,9 +53,24 @@ Changelog = "https://github.com/Alvandcode/image-metadata-cleaner/releases"
 [tool.setuptools.packages.find]
 include = ["cleaner*", "cli*", "api*"]
 
+[tool.setuptools.dynamic]
+version = { attr = "cleaner.__version__" }
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.coverage.run]
+source = ["cleaner", "cli", "api"]
+branch = false
+
+[tool.coverage.report]
+skip_covered = true
+exclude_lines = [
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
 
 [tool.ruff]
 line-length = 120

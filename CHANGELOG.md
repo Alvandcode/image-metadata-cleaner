@@ -4,6 +4,65 @@ All notable changes to this project are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/); versions
 follow [SemVer](https://semver.org/).
 
+## [0.4.0] — 2026-09-16
+
+A hardening release: the distribution pipeline is now verifiable end to end, the
+web app installs properly on iOS/Android, and two photo-corrupting bugs are gone.
+
+### Fixed
+
+- **`--resize` is now a bounding box.** It used to resize to an exact `WxH`, which
+  squashed the aspect ratio, and it *enlarged* photos smaller than the box — both
+  degraded images while claiming to tidy them. It now fits inside the box, keeps
+  the ratio and never enlarges. `resize=(w, h)` in the Python API is unchanged.
+- **The version was hard-coded in three places** (`cli/main.py`, `api/server.py`,
+  `pyproject.toml`) and the CLI reported `0.3.0` while the wheel said `0.4.0`. The
+  version now lives only in `cleaner/__init__.py`; `pyproject.toml` reads it.
+- **The web app never corrupts oversized photos.** Browsers silently clamp a
+  canvas that is too large, and a clamped width makes `drawImage()` crop instead
+  of scale. The app now verifies the canvas it actually got, backs off and retries,
+  and tells you when a photo had to be scaled down. It also reads the dimensions
+  from the file header before decoding, so a too-large photo gets an accurate
+  message instead of "not an image".
+- iOS showed a blank home-screen icon: `apple-touch-icon` pointed at an SVG, which
+  Safari ignores. There are real PNG icons now.
+
+### Added
+
+- **PyPI publishing** on `v*` tags via trusted publishing (OIDC, no stored
+  token), with PEP 740 attestations, plus a guard that fails the release if the
+  tag and the packaged version disagree.
+- **Signed, verifiable releases:** build provenance attestations for the wheel,
+  sdist and every PyInstaller binary, an SPDX SBOM for the whole release, and a
+  `SHA256SUMS.txt` a downloader can check.
+- **Container images on GHCR** with provenance and SBOM attestations.
+- **`THREAT_MODEL.md`** — adversaries, trust boundaries, and an honest list of
+  what cleaning does *not* guarantee.
+- **CI security job:** `zizmor` audits the workflows themselves and `pip-audit`
+  checks the pinned dependencies; pull requests get a dependency review. Every
+  action is pinned by commit SHA, and checkouts no longer persist credentials.
+- **Property-based tests** (`tests/test_properties.py`): the full 8-orientation
+  EXIF matrix, "no metadata survives" over generated JPEG/PNG inputs, "the input
+  file is byte-identical afterwards", and aspect-ratio/cap invariants for resize.
+  The suite is 66 tests and CI enforces a coverage floor.
+- **Mobile share target:** share a photo from any app's share sheet and it opens
+  in the cleaner, straight into the drop zone.
+- **Installable on mobile:** PNG + maskable icons, install-prompt screenshots, and
+  a service-worker cache version stamped with the commit id on every deploy, so
+  the app actually updates instead of serving yesterday's shell forever.
+- **Accessibility:** the progress/result region is a live region, tables use row
+  headers, and the results list announces itself as busy while processing.
+- **Contributor tooling:** `tools/generate_icons.py` (reproducible icon set),
+  `tools/dev_server.py` (serves `docs/` with `no-store`, because the service
+  worker's cache-first behaviour otherwise hides your edits).
+- Deep links for docs, screenshots and smoke tests: `?theme=dark&lang=en&demo=1`.
+
+### Changed
+
+- The `dev` extra now includes `hypothesis`, `zizmor` and `pip-audit`.
+- Dependencies bumped to the versions Dependabot proposed: `ruff` 0.16.7,
+  `mypy` 2.3.1, `pytest` 9, `pytest-cov` 7, `werkzeug` 3.1.8, `pillow-heif` 1.7.0.
+
 ## [0.3.0] — 2026-09-15
 
 A full audit-response release: every critical finding from the code review is

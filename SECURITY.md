@@ -4,8 +4,13 @@
 
 | Version | Supported |
 |---|---|
-| `0.3.x` (latest `main`) | ✅ |
-| `0.2.x` and older tags | ❌ (please upgrade) |
+| `0.4.x` (latest `main`) | ✅ |
+| `0.3.x` and older tags | ⚠️ fixes only for metadata leaks |
+| `0.2.x` and older | ❌ (please upgrade) |
+
+Supplies for releases are verifiable rather than trusted: every artifact is
+published with an SPDX SBOM, a `SHA256SUMS.txt` and a build-provenance
+attestation (`gh attestation verify <file> --repo Alvandcode/image-metadata-cleaner`).
 
 ## Reporting a vulnerability
 
@@ -32,6 +37,10 @@ soon as possible. Credit is given in the advisory and release notes unless you
 prefer to stay anonymous.
 
 ## Threat model
+
+A full model — adversaries, trust boundaries, why a compromised dependency still
+cannot exfiltrate a photo in the web app, and the risks that remain — lives in
+[`THREAT_MODEL.md`](./THREAT_MODEL.md). The short version follows.
 
 The project has two very different deployments, with different trust levels.
 

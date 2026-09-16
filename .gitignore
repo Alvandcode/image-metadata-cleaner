@@ -17,6 +17,9 @@ htmlcov/
 # Local scratch space used while reviewing/verifying (never committed)
 .probe/
 
+# Local agent/tooling scratch space
+.freebuff/
+
 # Generated images / cleaning outputs
 *.jpg
 *.jpeg

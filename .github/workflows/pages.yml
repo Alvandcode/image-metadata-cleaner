@@ -23,26 +23,50 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Verify the PWA has no network calls
         run: |
           # The whole privacy promise is "no upload". Fail the build if the app
           # grows a fetch/XHR/WebSocket/beacon call to a remote origin.
-          if grep -RInE "(fetch|XMLHttpRequest|WebSocket|sendBeacon)\\s*\\([^)]*https?://" docs/*.js docs/*.html; then
+          if grep -RInE "(fetch|XMLHttpRequest|WebSocket|sendBeacon)\s*\([^)]*https?://" docs/*.js docs/*.html; then
             echo "::error::The PWA must never talk to a remote origin."
             exit 1
           fi
           test -f docs/index.html
           test -f docs/sw.js
           test -f docs/manifest.json
-      - uses: actions/configure-pages@v5
-        with:
-          # Turn Pages on automatically (build type: workflow) so the first
-          # deploy does not need a manual Settings → Pages change.
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
+      - name: Every file the manifest points at must exist
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+          root = pathlib.Path("docs")
+          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+          refs = [i["src"] for i in manifest.get("icons", [])]
+          refs += [s["src"] for s in manifest.get("screenshots", [])]
+          refs.append(manifest.get("start_url", "./"))
+          missing = [r for r in refs if not (root / r.lstrip("./")).exists()]
+          if missing:
+              sys.exit(f"manifest references missing files: {missing}")
+          print(f"manifest references {len(refs)} files, all present")
+          PY
+      - name: Stamp the service-worker cache version with this commit
+        run: |
+          # Without this the browser keeps serving the previous app shell from
+          # cache forever, because the cache name never changes.
+          version="imc-${GITHUB_SHA::12}"
+          sed -i -E "s|^const VERSION = \"imc-[^\"]*\";|const VERSION = \"${version}\";|" docs/sw.js
+          grep -q "const VERSION = \"${version}\";" docs/sw.js || {
+            echo "::error::could not stamp the service-worker cache version"
+            exit 1
+          }
+          grep -n '^const VERSION' docs/sw.js
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: docs
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

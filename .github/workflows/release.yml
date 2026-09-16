@@ -6,32 +6,66 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-dist:
     name: sdist + wheel
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # signing the build provenance
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
+          # Deliberately no pip cache here: a poisoned cache must not be able to
+          # influence artifacts that get published and signed.
+      - name: The tag and the packaged version must agree
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          python - <<'PY'
+          import os, pathlib, re, sys
+          text = pathlib.Path("pyproject.toml").read_text(encoding="utf-8")
+          version = re.search(r'^version = "([^"]+)"', text, re.M).group(1)
+          tag = os.environ["GITHUB_REF_NAME"]
+          if tag != f"v{version}":
+              sys.exit(f"tag {tag} does not match the packaged version {version}")
+          print(f"tag {tag} matches version {version}")
+          PY
       - name: Build
         run: |
           python -m pip install --upgrade pip build
           python -m build
-          python -m pip install dist/*.whl
+      - name: The published wheel must install and pass the suite
+        run: |
+          python -m pip install dist/*.whl "pytest==9.1.1"
           img-clean --version
+          img-clean --help > /dev/null
           python -m pytest -q
-      - uses: actions/upload-artifact@v4
+      - name: Sign the build provenance of the distributions
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: "dist/*"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist
           path: dist/*
+          if-no-files-found: error
 
   build-binary:
-    name: standalone CLI (${{ matrix.os }})
+    name: standalone CLI (${{ matrix.artifact }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -43,15 +77,18 @@ jobs:
           - os: macos-latest
             artifact: img-clean-macos
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
+          # No cache: the binaries below are signed and published.
       - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install pyinstaller
+          pip install "pyinstaller==6.16.0"
       - name: Build single-file binary (no server, CLI only)
         run: >
           pyinstaller --onefile --clean --noconfirm
@@ -66,32 +103,122 @@ jobs:
           BIN=dist/img-clean
           [ -f "$BIN.exe" ] && BIN=dist/img-clean.exe
           "$BIN" --version
-          "$BIN" --help
-      - uses: actions/upload-artifact@v4
+          "$BIN" --help > /dev/null
+      - name: Sign the build provenance of the binary
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: "dist/img-clean*"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.artifact }}
           path: dist/img-clean*
+          if-no-files-found: error
+
+  publish-pypi:
+    name: publish to PyPI (trusted publishing)
+    needs: [build-dist]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # No API token anywhere: PyPI trusts this workflow's OIDC identity.
+    # The same identity signs PEP 740 attestations for every uploaded file.
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          packages-dir: dist/
+          attestations: true
+
+  publish-image:
+    name: publish container image to GHCR
+    needs: [build-dist]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # provenance / SBOM attestations for the image
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Build provenance and an SBOM travel with the image.
+          provenance: true
+          sbom: true
 
   release:
     name: publish GitHub release
     needs: [build-dist, build-binary]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # creating the release
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts
-      - name: Flatten artifacts
+      - name: Collect every published file in one flat directory
         run: |
           mkdir -p release
-          find artifacts -type f -maxdepth 2 -exec cp {} release/ \;
+          find artifacts -type f -exec cp {} release/ \;
           ls -la release
-      - name: Create release
+      - name: Software bill of materials for the whole release
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: release
+          format: spdx-json
+          output-file: release/sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Checksums a downloader can verify
+        run: |
+          cd release
+          rm -f SHA256SUMS.txt
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Attest every file that will be published
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: "release/*"
+      - name: Create the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
-            release/*
+            release/* \
+          || gh release upload "${GITHUB_REF_NAME}" release/* --clobber
