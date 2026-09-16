@@ -157,15 +157,15 @@ report = analyze_metadata("photo.jpg")
 
 result = clean_metadata(
     "photo.jpg",
-    "clean.jpg",            # None -> "photo_cleaned.jpg"
+    "clean.jpg",  # None -> "photo_cleaned.jpg"
     resize=(1600, 1200),
     watermark_text="© علیرضا",
     opacity=0.4,
     quality=90,
-    auto_orient=True,       # bake EXIF orientation into the pixels
-    keep_icc=False,         # True keeps the colour profile
-    overwrite=False,        # refuse to replace an existing file
-    verify=True,            # re-analyse our own output
+    auto_orient=True,  # bake EXIF orientation into the pixels
+    keep_icc=False,  # True keeps the colour profile
+    overwrite=False,  # refuse to replace an existing file
+    verify=True,  # re-analyse our own output
 )
 assert result["verified"]["has_metadata"] is False
 
