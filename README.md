@@ -50,6 +50,8 @@ browser blocks the request and the console logs a CSP violation.
 
 ### 2. CLI / library
 
+Requires **Python 3.10+** and **git** (`pyproject.toml`: `requires-python = ">=3.10"`; Docker uses `python:3.11-slim`).
+
 ```bash
 git clone https://github.com/Alvandcode/image-metadata-cleaner.git
 cd image-metadata-cleaner
