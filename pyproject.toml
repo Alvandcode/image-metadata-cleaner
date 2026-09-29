@@ -33,14 +33,14 @@ dependencies = [
 img-clean = "cli.main:cli"
 
 [project.optional-dependencies]
-heic = ["pillow-heif==1.7.0"]
+heic = ["pillow-heif==1.8.0"]
 dev = [
     "pytest>=9,<10",
     "pytest-cov>=7,<8",
-    "hypothesis==6.168.0",
-    "ruff==0.16.7",
+    "hypothesis==6.168.1",
+    "ruff==0.16.9",
     "mypy==2.3.1",
-    "pillow-heif==1.7.0",
+    "pillow-heif==1.8.0",
     "zizmor==1.30.1",
     "pip-audit==2.10.1",
 ]
